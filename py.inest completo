@@ -1,0 +1,123 @@
+import math
+import random
+import datetime
+import statistics
+import locale
+
+# configuração de moeda brasileira
+locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+
+# ---------------- ENTRADAS ----------------
+
+capital = float(input('Capital Inicial (R$): '))
+aporte = float(input('Aporte Mensal (R$): '))
+meses = int(input('Prazo (meses): '))
+cdi_anual = float(input('CDI anual (%): ')) / 100
+perc_cdb = float(input('Percentual do CDI CDB (%): ')) / 100
+perc_lci = float(input('Percentual do CDI LCI/LCA (%): ')) / 100
+taxa_fii = float(input('Rentabilidade mensal FII (%): ')) / 100
+meta = float(input('Meta financeira (R$): '))
+
+# ---------------- FUNÇÃO MOEDA ----------------
+
+def moeda(valor):
+    return locale.currency(valor, grouping=True)
+
+# ---------------- CDI MENSAL ----------------
+
+cdi_mensal = math.pow((1 + cdi_anual), 1/12) - 1
+
+# ---------------- TOTAL INVESTIDO ----------------
+
+total_investido = capital + (aporte * meses)
+
+# ---------------- CDB ----------------
+
+taxa_cdb = cdi_mensal * perc_cdb
+
+montante_cdb = capital
+for i in range(meses):
+    montante_cdb = montante_cdb * (1 + taxa_cdb) + aporte
+
+lucro_cdb = montante_cdb - total_investido
+montante_cdb_liquido = total_investido + (lucro_cdb * 0.85)
+
+# ---------------- LCI / LCA ----------------
+
+taxa_lci = cdi_mensal * perc_lci
+
+montante_lci = capital
+for i in range(meses):
+    montante_lci = montante_lci * (1 + taxa_lci) + aporte
+
+# ---------------- POUPANÇA ----------------
+
+taxa_poupanca = 0.005
+
+montante_poupanca = capital
+for i in range(meses):
+    montante_poupanca = montante_poupanca * (1 + taxa_poupanca) + aporte
+
+# ---------------- FII (SIMULAÇÃO) ----------------
+
+resultados_fii = []
+
+for i in range(5):
+
+    variacao = random.uniform(-0.03, 0.03)
+    taxa_final = taxa_fii + variacao
+
+    montante = capital
+
+    for m in range(meses):
+        montante = montante * (1 + taxa_final) + aporte
+
+    resultados_fii.append(montante)
+
+media_fii = statistics.mean(resultados_fii)
+mediana_fii = statistics.median(resultados_fii)
+desvio_fii = statistics.stdev(resultados_fii)
+
+# ---------------- DATAS ----------------
+
+data_simulacao = datetime.datetime.now()
+data_resgate = data_simulacao + datetime.timedelta(days=meses * 30)
+
+# ---------------- META ----------------
+
+meta_atingida = media_fii >= meta
+
+# ---------------- RELATÓRIO ----------------
+
+print('\n----------------------------------')
+print('PyInvest - Simulador de Investimentos')
+print('----------------------------------')
+
+print('\nData da simulação:', data_simulacao.strftime('%d/%m/%Y'))
+print('Data estimada de resgate:', data_resgate.strftime('%d/%m/%Y'))
+
+print('\nTotal investido:', moeda(total_investido))
+
+print('\n--- RESULTADOS FINANCEIROS ---')
+
+print('CDB:', moeda(montante_cdb_liquido))
+print('LCI/LCA:', moeda(montante_lci))
+print('Poupança:', moeda(montante_poupanca))
+print('FII (média):', moeda(media_fii))
+
+print('\n--- ESTATÍSTICAS FII ---')
+
+print('Mediana:', moeda(mediana_fii))
+print('Desvio padrão:', moeda(desvio_fii))
+
+print('\nMeta atingida:', meta_atingida)
+
+# ---------------- GRÁFICO ----------------
+
+print('\n--- GRÁFICO COMPARATIVO ---')
+print('(Cada █ = R$ 1.000)\n')
+
+print('CDB      ', '█' * int(montante_cdb_liquido / 1000))
+print('LCI/LCA  ', '█' * int(montante_lci / 1000))
+print('Poupança ', '█' * int(montante_poupanca / 1000))
+print('FII      ', '█' * int(media_fii / 1000))
