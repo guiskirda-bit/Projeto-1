@@ -33,11 +33,11 @@ def gerar_arquivo_logs(nome, qtd):
         # status
         r = random.randint(1, 100)
 
-        if r <= 65:
+        if r <= 81:
             status = 200
-        elif r <= 80:
+        elif r <= 84:
             status = 403
-        elif r <= 95:
+        elif r <= 88:
             status = 404
         else:
             status = 500
