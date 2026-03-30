@@ -1,0 +1,317 @@
+import random
+from datetime import datetime, timedelta
+
+# ---------------- GERAR LOGS ----------------
+
+def gerar_arquivo_logs(nome_arquivo, quantidade):
+
+    arq = open(nome_arquivo, "w")
+
+    data = datetime.now()
+
+    for i in range(quantidade):
+
+        data = data + timedelta(seconds=1)
+
+        # IP repetido proposital (comportamento suspeito)
+        if i % 7 == 0:
+            ip = "192.168.0.1"
+        else:
+            ip = "192.168.0." + str((i % 9) + 2)
+
+        # método
+        if i % 2 == 0:
+            metodo = "GET"
+        else:
+            metodo = "POST"
+
+        # recurso (cenários obrigatórios)
+        if i % 10 == 0:
+            recurso = "/login"
+        elif i % 9 == 0:
+            recurso = "/admin"
+        elif i % 8 == 0:
+            recurso = "/erro"
+        elif i % 5 == 0:
+            recurso = "/produtos"
+        else:
+            recurso = "/home"
+
+        # status com cenários garantidos
+        r = random.randint(1, 100)
+
+        if recurso == "/login" and i % 3 == 0:
+            status = 403
+        elif recurso == "/admin" and i % 2 == 0:
+            status = 403
+        elif recurso == "/erro":
+            status = 404
+        elif i % 15 == 0 or i % 16 == 0 or i % 17 == 0:
+            status = 500  # sequência de erro
+        else:
+            if r < 80:
+                status = 200
+            elif r < 85:
+                status = 403
+            elif r < 89:
+                status = 404
+            else:
+                status = 500
+
+        # tempo com degradação
+        tempo = 100 + (i * 10)
+
+        tamanho = random.randint(200, 2000)
+
+        # protocolo
+        if i % 2 == 0:
+            protocolo = "HTTP/1.1"
+        else:
+            protocolo = "HTTP/2"
+
+        # bot
+        if i % 12 == 0:
+            agent = "GoogleBot"
+        else:
+            agent = "Chrome"
+
+        referer = "/home"
+
+        linha = "[" + data.strftime("%d/%m/%Y %H:%M:%S") + "] "
+        linha += ip + " - "
+        linha += metodo + "-" + str(status) + "-" + recurso + " - "
+        linha += str(tempo) + "ms-" + str(tamanho) + "B - "
+        linha += protocolo + " - "
+        linha += agent + " - "
+        linha += referer + "\n"
+
+        arq.write(linha)
+
+    arq.close()
+    print("Logs gerados!")
+
+
+# ---------------- ANALISAR ----------------
+
+def analisar_arquivo_logs(nome_arquivo):
+
+    arq = open(nome_arquivo, "r")
+
+    total = 0
+    sucesso = 0
+    erro = 0
+    erro500 = 0
+
+    soma_tempo = 0
+    maior = 0
+    menor = 999999
+
+    rapido = 0
+    normal = 0
+    lento = 0
+
+    s200 = 0
+    s403 = 0
+    s404 = 0
+    s500 = 0
+
+    brute = 0
+    bot = 0
+    falha = 0
+    degradacao = 0
+    admin_erro = 0
+
+    # histórico
+    ip1 = ip2 = ip3 = ip4 = ""
+    s1 = s2 = 0
+    t1 = t2 = t3 = 0
+
+    for linha in arq:
+
+        total += 1
+        linha = linha.strip()
+
+        i = 0
+
+        # pular data
+        while linha[i] != "]":
+            i += 1
+        i += 2
+
+        # pegar IP
+        ip = ""
+        while linha[i] != " ":
+            ip += linha[i]
+            i += 1
+
+        i += 3
+
+        # pegar metodo-status-recurso
+        msr = ""
+        while linha[i] != " ":
+            msr += linha[i]
+            i += 1
+
+        metodo = ""
+        status = ""
+        recurso = ""
+
+        parte = ""
+        cont = 0
+        j = 0
+
+        while j < len(msr):
+            if msr[j] == "-":
+                if cont == 0:
+                    metodo = parte
+                elif cont == 1:
+                    status = int(parte)
+                parte = ""
+                cont += 1
+            else:
+                parte += msr[j]
+            j += 1
+
+        recurso = parte
+
+        i += 3
+
+        # tempo
+        tempo_str = ""
+        while linha[i] != "m":
+            tempo_str += linha[i]
+            i += 1
+
+        tempo = int(tempo_str)
+
+        # agent (detectar bot)
+        if "Bot" in linha:
+            bot += 1
+
+        # cálculos
+        soma_tempo += tempo
+
+        if tempo > maior:
+            maior = tempo
+        if tempo < menor:
+            menor = tempo
+
+        if tempo < 200:
+            rapido += 1
+        elif tempo < 800:
+            normal += 1
+        else:
+            lento += 1
+
+        if status == 200:
+            sucesso += 1
+            s200 += 1
+        else:
+            erro += 1
+
+        if status == 403:
+            s403 += 1
+        elif status == 404:
+            s404 += 1
+        elif status == 500:
+            s500 += 1
+            erro500 += 1
+
+        # brute force
+        if ip == ip1 and ip == ip2 and status == 403 and recurso == "/login":
+            brute += 1
+
+        # falha crítica
+        if status == 500 and s1 == 500 and s2 == 500:
+            falha += 1
+
+        # degradação
+        if t1 < t2 and t2 < t3 and t3 < tempo:
+            degradacao += 1
+
+        # admin
+        if recurso == "/admin" and status != 200:
+            admin_erro += 1
+
+        # atualizar histórico
+        ip4 = ip3
+        ip3 = ip2
+        ip2 = ip1
+        ip1 = ip
+
+        s2 = s1
+        s1 = status
+
+        t1 = t2
+        t2 = t3
+        t3 = tempo
+
+    arq.close()
+
+    disponibilidade = (sucesso / total) * 100
+    media = soma_tempo / total
+
+    if falha > 0 or disponibilidade < 70:
+        estado = "CRITICO"
+    elif disponibilidade < 85:
+        estado = "INSTAVEL"
+    elif disponibilidade < 95:
+        estado = "ATENCAO"
+    else:
+        estado = "SAUDAVEL"
+
+    print("\nRELATORIO")
+    print("Total:", total)
+    print("Sucesso:", sucesso)
+    print("Erro:", erro)
+    print("Erro 500:", erro500)
+    print("Disponibilidade:", round(disponibilidade, 2))
+    print("Tempo medio:", int(media))
+    print("Maior:", maior)
+    print("Menor:", menor)
+    print("Rapido:", rapido)
+    print("Normal:", normal)
+    print("Lento:", lento)
+    print("200:", s200)
+    print("403:", s403)
+    print("404:", s404)
+    print("500:", s500)
+    print("Brute force:", brute)
+    print("Bots:", bot)
+    print("Falha critica:", falha)
+    print("Degradacao:", degradacao)
+    print("Admin erro:", admin_erro)
+    print("Estado:", estado)
+
+
+# ---------------- MENU ----------------
+
+def menu():
+
+    while True:
+
+        print("\n1 - Gerar logs")
+        print("2 - Analisar logs")
+        print("3 - Gerar e analisar")
+        print("4 - Sair")
+
+        op = input("Escolha: ")
+
+        if op == "1":
+            gerar_arquivo_logs("logs.txt", 200)
+
+        elif op == "2":
+            analisar_arquivo_logs("logs.txt")
+
+        elif op == "3":
+            gerar_arquivo_logs("logs.txt", 200)
+            analisar_arquivo_logs("logs.txt")
+
+        elif op == "4":
+            break
+
+        else:
+            print("Opcao invalida")
+
+
+menu()
