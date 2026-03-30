@@ -1,0 +1,285 @@
+import random
+from datetime import datetime, timedelta
+
+# ---------------- GERAR LOGS ----------------
+
+def gerar_arquivo_logs(nome, qtd):
+
+    arq = open(nome, "w")
+
+    data = datetime.now()
+
+    for i in range(qtd):
+
+        data = data + timedelta(seconds=1)
+
+        ip = "192.168.0." + str((i % 10) + 1)
+
+        if i % 2 == 0:
+            metodo = "GET"
+        else:
+            metodo = "POST"
+
+        # recurso
+        if i % 6 == 0:
+            recurso = "/login"
+        elif i % 5 == 0:
+            recurso = "/admin"
+        elif i % 4 == 0:
+            recurso = "/produtos"
+        else:
+            recurso = "/home"
+
+        # status
+        if recurso == "/login" and i % 3 == 0:
+            status = 403
+        elif recurso == "/admin" and i % 2 == 0:
+            status = 403
+        elif i % 50 == 0:
+            status = 500
+        elif i % 7 == 0:
+            status = 404
+        else:
+            status = 200
+
+        tempo = 100 + (i % 5) * 200
+        tamanho = random.randint(200, 1500)
+
+        if i % 2 == 0:
+            protocolo = "HTTP/1.1"
+        else:
+            protocolo = "HTTP/2"
+
+        if i % 10 == 0:
+            agent = "Bot"
+        else:
+            agent = "Chrome"
+
+        referer = "/home"
+
+        linha = "[" + data.strftime("%d/%m/%Y %H:%M:%S") + "] " + ip + " - " + metodo + "-" + str(status) + "-" + recurso + " - " + str(tempo) + "ms-" + str(tamanho) + "B - " + protocolo + " - " + agent + " - " + referer + "\n"
+
+        arq.write(linha)
+
+    arq.close()
+    print("Logs gerados!")
+
+
+# ---------------- ANALISAR ----------------
+
+def analisar_arquivo_logs(nome):
+
+    arq = open(nome, "r")
+
+    total = sucesso = erro = erro500 = 0
+    soma_tempo = 0
+    maior = 0
+    menor = 99999
+
+    rapido = normal = lento = 0
+
+    s200 = s403 = s404 = s500 = 0
+
+    # históricos
+    ip1 = ip2 = ip3 = ip4 = ""
+    s1 = s2 = 0
+    t1 = t2 = t3 = 0
+
+    brute = bot = falha = degradacao = admin_erro = 0
+
+    for linha in arq:
+
+        total += 1
+
+        linha = linha.strip()
+
+        # ---------------- PEGAR IP ----------------
+        i = 0
+        while linha[i] != "]":
+            i += 1
+
+        i += 2  # pula "] "
+
+        ip = ""
+        while linha[i] != " ":
+            ip += linha[i]
+            i += 1
+
+        # pula " - "
+        i += 3
+
+        # ---------------- PEGAR MSR ----------------
+        msr = ""
+        while linha[i] != " ":
+            msr += linha[i]
+            i += 1
+
+        # separar metodo-status-recurso
+        metodo = ""
+        status = ""
+        recurso = ""
+
+        parte = ""
+        cont = 0
+
+        for c in msr:
+            if c == "-":
+                if cont == 0:
+                    metodo = parte
+                elif cont == 1:
+                    status = int(parte)
+
+                parte = ""
+                cont += 1
+            else:
+                parte += c
+
+        recurso = parte
+
+        # pula " - "
+        i += 3
+
+        # ---------------- PEGAR TEMPO ----------------
+        tempo_str = ""
+        while linha[i] != "m":
+            tempo_str += linha[i]
+            i += 1
+
+        tempo = int(tempo_str)
+
+        # ---------------- CÁLCULOS ----------------
+
+        soma_tempo += tempo
+
+        if tempo > maior:
+            maior = tempo
+        if tempo < menor:
+            menor = tempo
+
+        if tempo < 200:
+            rapido += 1
+        elif tempo < 800:
+            normal += 1
+        else:
+            lento += 1
+
+        if status == 200:
+            sucesso += 1
+            s200 += 1
+        else:
+            erro += 1
+
+        if status == 403:
+            s403 += 1
+        elif status == 404:
+            s404 += 1
+        elif status == 500:
+            s500 += 1
+            erro500 += 1
+
+        # brute force
+        if ip == ip1 == ip2 and status == 403 and recurso == "/login":
+            brute += 1
+
+        # bot
+        if ip == ip1 == ip2 == ip3 == ip4:
+            bot += 1
+
+        # falha crítica
+        if status == 500 and s1 == 500 and s2 == 500:
+            falha += 1
+
+        # degradação
+        if t1 < t2 < t3 < tempo:
+            degradacao += 1
+
+        # admin
+        if recurso == "/admin" and status != 200:
+            admin_erro += 1
+
+        # atualizar históricos
+        ip4 = ip3
+        ip3 = ip2
+        ip2 = ip1
+        ip1 = ip
+
+        s2 = s1
+        s1 = status
+
+        t1 = t2
+        t2 = t3
+        t3 = tempo
+
+    arq.close()
+
+    disponibilidade = (sucesso / total) * 100
+    taxa_erro = (erro / total) * 100
+    media = soma_tempo / total
+
+    if falha > 0 or disponibilidade < 70:
+        estado = "CRITICO"
+    elif disponibilidade < 85:
+        estado = "INSTAVEL"
+    elif disponibilidade < 95:
+        estado = "ATENCAO"
+    else:
+        estado = "SAUDAVEL"
+
+    # ---------------- RELATÓRIO ----------------
+
+    print("\nRELATORIO")
+    print("Total:", total)
+    print("Sucesso:", sucesso)
+    print("Erro:", erro)
+    print("Erro 500:", erro500)
+    print("Disponibilidade:", round(disponibilidade, 2))
+    print("Taxa erro:", round(taxa_erro, 2))
+    print("Tempo medio:", int(media))
+    print("Maior:", maior)
+    print("Menor:", menor)
+    print("Rapido:", rapido)
+    print("Normal:", normal)
+    print("Lento:", lento)
+    print("200:", s200)
+    print("403:", s403)
+    print("404:", s404)
+    print("500:", s500)
+    print("Brute force:", brute)
+    print("Bots:", bot)
+    print("Falha critica:", falha)
+    print("Degradacao:", degradacao)
+    print("Admin erro:", admin_erro)
+    print("Estado:", estado)
+
+
+# ---------------- MENU ----------------
+
+def menu():
+
+    while True:
+
+        print("\n1 - Gerar logs")
+        print("2 - Analisar logs")
+        print("3 - Gerar e analisar")
+        print("4 - Sair")
+
+        op = input("Escolha: ")
+
+        if op == "1":
+            gerar_arquivo_logs("logs.txt", 200)
+
+        elif op == "2":
+            analisar_arquivo_logs("logs.txt")
+
+        elif op == "3":
+            gerar_arquivo_logs("logs.txt", 200)
+            analisar_arquivo_logs("logs.txt")
+
+        elif op == "4":
+            break
+
+        else:
+            print("opcao invalida")
+
+
+menu()
